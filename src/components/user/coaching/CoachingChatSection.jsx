@@ -189,10 +189,19 @@ AI Coach랑 조금 더 재밌게 이어서 대화해봐요~ 히히
         previousMessages,
       });
 
-      const targetCoachingSessionId = scriptResponse.coachingSessionId ?? flowResponse.coachingSessionId;
+      const targetCoachingSessionId = scriptResponse?.coachingSessionId ?? flowResponse?.coachingSessionId;
+      const preparedTurns = scriptResponse?.turns ?? [];
+
+      if (!targetCoachingSessionId) {
+        throw new Error('코칭 세션 정보를 받지 못했어요. 잠시 후 다시 시도해주세요.');
+      }
+
+      if (!preparedTurns.length) {
+        throw new Error('코칭 스크립트를 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+      }
 
       setCoachingSessionId(targetCoachingSessionId);
-      setScriptTurns(scriptResponse.turns ?? []);
+      setScriptTurns(preparedTurns);
       onSelectMode(optionType);
       onPhaseChange('scenario');
 
@@ -201,11 +210,11 @@ AI Coach랑 조금 더 재밌게 이어서 대화해봐요~ 히히
         createTextMessage(
           'ai',
           'AI Coach',
-          `${flowResponse.initialMessage?.message ?? '좋아요. 지금부터 AI 코칭을 시작해볼게요.'}
+          `${flowResponse?.initialMessage?.message ?? '좋아요. 지금부터 AI 코칭을 시작해볼게요.'}
 
-이번 코칭 대화는 총 ${scriptResponse.turns?.length ?? 0}턴으로 준비했어요.
+이번 코칭 대화는 총 ${preparedTurns.length}턴으로 준비했어요.
 
-${(scriptResponse.turns ?? [])
+${preparedTurns
   .map((turn) => `TURN ${turn.turnOrder}
 AI: ${turn.assistantText}
 You: ${turn.expectedText}`)

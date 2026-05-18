@@ -2,11 +2,12 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { coachingService } from '../../api/user/coachingService';
 
 // 기존 학습 세션(sessionId)을 기준으로 AI 코칭 진입 화면에 필요한 데이터를 조회
-export function useCoachingEntryQuery(sessionId) {
+export function useCoachingEntryQuery(sessionId, options = {}) {
     return useQuery({
+        ...options,
         queryKey: ['coachingEntry', sessionId],
         queryFn: () => coachingService.getCoachingEntry(sessionId),
-        enabled: Boolean(sessionId),
+        enabled: Boolean(sessionId) && (options.enabled ?? true),
     });
 }
 

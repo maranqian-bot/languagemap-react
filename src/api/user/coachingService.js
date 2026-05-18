@@ -1,5 +1,15 @@
 import axiosInstance from '../axiosInstance';
 
+function unwrapCoachingResponse(response, label) {
+  console.debug(`[coaching] ${label} raw response`, response);
+
+  const unwrapped = response?.data?.data ?? response?.data ?? response;
+
+  console.debug(`[coaching] ${label} unwrapped data`, unwrapped);
+
+  return unwrapped;
+}
+
 export async function getCoachingEntry(sessionId) {
   const response = await axiosInstance.get(`/api/coaching/entry/${sessionId}`);
   return response.data;
@@ -10,7 +20,8 @@ export async function startCoachingFlow({ sessionId, optionType }) {
     sessionId,
     optionType,
   });
-  return response.data;
+
+  return unwrapCoachingResponse(response, 'start flow');
 }
 
 export async function prepareCoachingScript({
@@ -34,7 +45,7 @@ export async function prepareCoachingScript({
     previousMessages,
   });
 
-  return response.data;
+  return unwrapCoachingResponse(response, 'prepare script');
 }
 
 export async function startConversation(coachingSessionId) {

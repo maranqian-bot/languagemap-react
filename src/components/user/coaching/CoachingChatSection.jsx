@@ -55,6 +55,20 @@ function normalizePreviousMessages(messages = []) {
     .filter((message) => message.message);
 }
 
+function summarizeResponseShape(label, response) {
+  if (response === null) return `${label}=null`;
+  if (response === undefined) return `${label}=undefined`;
+
+  const data = response?.data;
+  const keys = typeof response === 'object' ? Object.keys(response).slice(0, 8) : [];
+  const dataKeys = data && typeof data === 'object' ? Object.keys(data).slice(0, 8) : [];
+  const coachingSessionId = response?.coachingSessionId ?? data?.coachingSessionId ?? null;
+  const turns = response?.turns ?? data?.turns ?? null;
+  const turnsLength = Array.isArray(turns) ? turns.length : null;
+
+  return `${label} keys=[${keys.join(',')}] dataKeys=[${dataKeys.join(',')}] coachingSessionId=${coachingSessionId ?? 'none'} turns=${turnsLength ?? 'none'}`;
+}
+
 function CoachingChatSection({
   summary,
   modes = [],
@@ -189,8 +203,8 @@ AI Coach랑 조금 더 재밌게 이어서 대화해봐요~ 히히
         previousMessages,
       });
 
-      console.debug('[coaching] start flow response shape', flowResponse);
-      console.debug('[coaching] prepare script response shape', scriptResponse);
+      console.error('[COACHING_DEBUG]', 'start flow response shape', flowResponse);
+      console.error('[COACHING_DEBUG]', 'prepare script response shape', scriptResponse);
 
       const targetCoachingSessionId =
         scriptResponse?.coachingSessionId ??
@@ -199,13 +213,17 @@ AI Coach랑 조금 더 재밌게 이어서 대화해봐요~ 히히
         flowResponse?.data?.coachingSessionId;
       const preparedTurns = scriptResponse?.turns ?? scriptResponse?.data?.turns ?? [];
       const initialMessage = flowResponse?.initialMessage ?? flowResponse?.data?.initialMessage;
+      const responseShapeSummary = [
+        summarizeResponseShape('flow', flowResponse),
+        summarizeResponseShape('script', scriptResponse),
+      ].join(' | ');
 
       if (!targetCoachingSessionId) {
-        throw new Error('코칭 세션 정보를 받지 못했어요. 잠시 후 다시 시도해주세요.');
+        throw new Error(`코칭 세션 정보를 받지 못했어요. 잠시 후 다시 시도해주세요. (${responseShapeSummary})`);
       }
 
       if (!preparedTurns.length) {
-        throw new Error('코칭 스크립트를 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+        throw new Error(`코칭 스크립트를 준비하지 못했어요. 잠시 후 다시 시도해주세요. (${responseShapeSummary})`);
       }
 
       setCoachingSessionId(targetCoachingSessionId);

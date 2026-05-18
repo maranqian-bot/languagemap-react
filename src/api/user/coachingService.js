@@ -1,11 +1,11 @@
 import axiosInstance from '../axiosInstance';
 
 function unwrapCoachingResponse(response, label) {
-  console.debug(`[coaching] ${label} raw response`, response);
+  console.error('[COACHING_DEBUG]', `${label} raw response`, response);
 
   const unwrapped = response?.data?.data ?? response?.data ?? response;
 
-  console.debug(`[coaching] ${label} unwrapped data`, unwrapped);
+  console.error('[COACHING_DEBUG]', `${label} unwrapped data`, unwrapped);
 
   return unwrapped;
 }

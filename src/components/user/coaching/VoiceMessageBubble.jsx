@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-const FASTAPI_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const FASTAPI_BASE_URL = import.meta.env.VITE_FASTAPI_BASE_URL;
 
 function resolveAudioUrl(audioUrl) {
   if (!audioUrl) return '';

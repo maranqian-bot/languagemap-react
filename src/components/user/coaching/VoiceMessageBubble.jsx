@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-const FASTAPI_BASE_URL = import.meta.env.VITE_FASTAPI_BASE_URL;
+const FASTAPI_BASE_URL = import.meta.env.VITE_FASTAPI_BASE_URL?.replace(/\/$/, '');
 
 function resolveAudioUrl(audioUrl) {
   if (!audioUrl) return '';
@@ -10,6 +10,11 @@ function resolveAudioUrl(audioUrl) {
   }
 
   if (audioUrl.startsWith('/static')) {
+    if (!FASTAPI_BASE_URL) {
+      console.error('[AUDIO_URL_ERROR] VITE_FASTAPI_BASE_URL is not configured');
+      return '';
+    }
+
     return `${FASTAPI_BASE_URL}${audioUrl}`;
   }
 

@@ -35,10 +35,23 @@ jobs:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_FASTAPI_BASE_URL: ${{ secrets.VITE_FASTAPI_BASE_URL }}
         run: |
+          if [ -z "$VITE_API_BASE_URL" ]; then
+            echo "::error::VITE_API_BASE_URL is not configured"
+            exit 1
+          fi
+
           if [ -z "$VITE_FASTAPI_BASE_URL" ]; then
             echo "::error::VITE_FASTAPI_BASE_URL is not configured"
             exit 1
           fi
+
+          case "$VITE_API_BASE_URL" in
+            http://*|https://*) ;;
+            *)
+              echo "::error::VITE_API_BASE_URL must start with http:// or https://"
+              exit 1
+              ;;
+          esac
 
           case "$VITE_FASTAPI_BASE_URL" in
             http://*|https://*) ;;
@@ -48,18 +61,7 @@ jobs:
               ;;
           esac
 
-          if [ "$VITE_FASTAPI_BASE_URL" = "$VITE_API_BASE_URL" ]; then
-            echo "::error::VITE_FASTAPI_BASE_URL must be different from VITE_API_BASE_URL"
-            exit 1
-          fi
-
-          case "$VITE_FASTAPI_BASE_URL" in
-            *cloudfront.net*)
-              echo "::error::VITE_FASTAPI_BASE_URL must point to FastAPI, not CloudFront"
-              exit 1
-              ;;
-          esac
-
+          echo "VITE_API_BASE_URL is configured"
           echo "VITE_FASTAPI_BASE_URL is configured"
 
       # 3-1. 배포용 환경변수 파일 생성

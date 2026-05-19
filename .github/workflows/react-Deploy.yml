@@ -30,13 +30,50 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Validate production env
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_FASTAPI_BASE_URL: ${{ secrets.VITE_FASTAPI_BASE_URL }}
+        run: |
+          if [ -z "$VITE_FASTAPI_BASE_URL" ]; then
+            echo "::error::VITE_FASTAPI_BASE_URL is not configured"
+            exit 1
+          fi
+
+          case "$VITE_FASTAPI_BASE_URL" in
+            http://*|https://*) ;;
+            *)
+              echo "::error::VITE_FASTAPI_BASE_URL must start with http:// or https://"
+              exit 1
+              ;;
+          esac
+
+          if [ "$VITE_FASTAPI_BASE_URL" = "$VITE_API_BASE_URL" ]; then
+            echo "::error::VITE_FASTAPI_BASE_URL must be different from VITE_API_BASE_URL"
+            exit 1
+          fi
+
+          case "$VITE_FASTAPI_BASE_URL" in
+            *cloudfront.net*)
+              echo "::error::VITE_FASTAPI_BASE_URL must point to FastAPI, not CloudFront"
+              exit 1
+              ;;
+          esac
+
+          echo "VITE_FASTAPI_BASE_URL is configured"
+
       # 3-1. 배포용 환경변수 파일 생성
       - name: Create production env file
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_FASTAPI_BASE_URL: ${{ secrets.VITE_FASTAPI_BASE_URL }}
+          VITE_CHAT_SOCKET_URL: ${{ secrets.VITE_CHAT_SOCKET_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
         run: |
-          echo "VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}" >> .env.production
-          echo "VITE_FASTAPI_BASE_URL=${{ secrets.VITE_FASTAPI_BASE_URL }}" >> .env.production
-          echo "VITE_CHAT_SOCKET_URL=${{ secrets.VITE_CHAT_SOCKET_URL }}" >> .env.production
-          echo "VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}" >> .env.production
+          printf 'VITE_API_BASE_URL=%s\n' "$VITE_API_BASE_URL" >> .env.production
+          printf 'VITE_FASTAPI_BASE_URL=%s\n' "$VITE_FASTAPI_BASE_URL" >> .env.production
+          printf 'VITE_CHAT_SOCKET_URL=%s\n' "$VITE_CHAT_SOCKET_URL" >> .env.production
+          printf 'VITE_GOOGLE_MAPS_API_KEY=%s\n' "$VITE_GOOGLE_MAPS_API_KEY" >> .env.production
           
       # 4. 리액트 프로젝트 빌드
       - name: Build React

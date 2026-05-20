@@ -1,5 +1,7 @@
 import axiosInstance from '../axiosInstance';
 
+const SPEECH_REQUEST_TIMEOUT_MS = 60000;
+
 function unwrapCoachingResponse(response, label) {
   console.error('[COACHING_DEBUG]', `${label} raw response`, response);
 
@@ -64,6 +66,7 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
     `/api/coaching/conversation/${coachingSessionId}/speech`,
     formData,
     {
+      timeout: SPEECH_REQUEST_TIMEOUT_MS,
       headers: {
         'Content-Type': 'multipart/form-data',
       },

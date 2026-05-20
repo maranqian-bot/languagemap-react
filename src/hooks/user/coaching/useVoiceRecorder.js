@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-const MIN_RECORDING_DURATION_MS = 1500;
+const MIN_RECORDING_DURATION_MS = 500;
 const MIN_AUDIO_BLOB_SIZE_BYTES = 4096;
 const MIN_AUDIO_RMS_LEVEL = 0.015;
 const MIN_AUDIO_PEAK_LEVEL = 0.08;
@@ -171,6 +171,7 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
             mediaRecorderRef.current = recorder;
             console.log('media recorder mimeType:', recorder.mimeType);
             console.log('media stream audio tracks:', stream.getAudioTracks().map((track) => ({
+                label: track.label,
                 enabled: track.enabled,
                 muted: track.muted,
                 readyState: track.readyState,
@@ -182,7 +183,6 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                 if (event.data && event.data.size > 0) {
                     audioChunksRef.current.push(event.data);
                     chunkSizesRef.current.push(event.data.size);
-                    console.log('recorded audio chunk size:', event.data.size);
                 }
             };
 
@@ -199,16 +199,24 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                     const audioBlob = new Blob(audioChunksRef.current, {
                         type: recorder.mimeType || 'audio/webm',
                     });
+                    const trackLabel = mediaStreamRef.current
+                        ?.getAudioTracks()
+                        .map((track) => track.label)
+                        .filter(Boolean)
+                        .join(', ') || 'unknown';
 
-                    console.log('recorded audioBlob size:', audioBlob.size);
-                    console.log('recorded audioBlob type:', audioBlob.type);
-                    console.log('recorded audio duration ms:', recordingDurationMs);
-                    console.log('recorded audio chunks:', chunkSizesRef.current);
-                    console.log('recorded audio level stats:', {
-                        sampleCount: audioLevelStats.sampleCount,
-                        maxRms: audioLevelStats.maxRms,
-                        maxPeak: audioLevelStats.maxPeak,
-                        averageRms,
+                    console.log('recorded audio summary:', {
+                        durationMs: recordingDurationMs,
+                        blobSize: audioBlob.size,
+                        blobType: audioBlob.type,
+                        chunkCount: chunkSizesRef.current.length,
+                        trackLabel,
+                        audioLevel: {
+                            sampleCount: audioLevelStats.sampleCount,
+                            maxRms: audioLevelStats.maxRms,
+                            maxPeak: audioLevelStats.maxPeak,
+                            averageRms,
+                        },
                     });
 
                     cleanupStream();
@@ -222,17 +230,23 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                     }
 
                     if (recordingDurationMs < MIN_RECORDING_DURATION_MS) {
-                        onError?.('녹음 시간이 너무 짧거나 음성 파일이 정상적으로 생성되지 않았습니다. 2초 이상 말한 뒤 다시 시도해주세요.');
+                        onError?.('녹음 시간이 너무 짧습니다. 다시 녹음해주세요.');
                         return;
                     }
 
                     if (audioBlob.size < MIN_AUDIO_BLOB_SIZE_BYTES) {
-                        if (hasAudibleInput(audioLevelStats)) {
-                            console.warn('Audio blob is small, but microphone input level was detected. Uploading for server-side validation.');
-                        } else {
-                            onError?.('마이크 입력이 감지되지 않았습니다. 브라우저 마이크 권한과 입력 장치를 확인한 뒤 다시 녹음해주세요.');
-                            return;
-                        }
+                        console.warn('Audio blob is small. Uploading for server-side recognition anyway.', {
+                            blobSize: audioBlob.size,
+                            minBlobSize: MIN_AUDIO_BLOB_SIZE_BYTES,
+                        });
+                    }
+
+                    if (!hasAudibleInput(audioLevelStats)) {
+                        console.warn('Low or silent microphone input detected. Uploading for server-side recognition anyway.', {
+                            sampleCount: audioLevelStats.sampleCount,
+                            maxRms: audioLevelStats.maxRms,
+                            maxPeak: audioLevelStats.maxPeak,
+                        });
                     }
 
                     await onRecorded?.(audioBlob);

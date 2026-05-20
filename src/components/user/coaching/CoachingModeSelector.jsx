@@ -1,4 +1,4 @@
-function CoachingModeSelector({ modes, selectedModeId, onSelect }) {
+function CoachingModeSelector({ modes, selectedModeId, onSelect, disabled = false }) {
   const icons = {
     WORD: '▣',
     GRAMMAR: '✎',
@@ -19,6 +19,7 @@ function CoachingModeSelector({ modes, selectedModeId, onSelect }) {
           key={mode.id}
           type="button"
           className={`coaching-mode-button ${selectedModeId === mode.id ? 'is-selected' : ''}`}
+          disabled={disabled}
           onClick={() => onSelect(mode.id)}
         >
           <span aria-hidden="true">{icons[mode.modeId ?? mode.id] ?? '•'}</span>

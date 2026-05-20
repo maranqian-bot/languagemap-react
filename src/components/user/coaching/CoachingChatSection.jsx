@@ -69,6 +69,22 @@ function summarizeResponseShape(label, response) {
   return `${label} keys=[${keys.join(',')}] dataKeys=[${dataKeys.join(',')}] coachingSessionId=${coachingSessionId ?? 'none'} turns=${turnsLength ?? 'none'}`;
 }
 
+function getActiveQuickReplies(quickReplies, phase) {
+  if (!quickReplies?.length) return [];
+
+  return quickReplies.filter((reply) => {
+    if (reply.modeId) {
+      return phase === 'intro';
+    }
+
+    if (reply.id === 'start_practice') {
+      return phase === 'scenario';
+    }
+
+    return true;
+  });
+}
+
 function CoachingChatSection({
   summary,
   modes = [],
@@ -168,6 +184,11 @@ AI Coach랑 조금 더 재밌게 이어서 대화해봐요~ 히히
   const handleSelectMode = async (modeId) => {
     const optionType = modeId?.replace('mode_', '');
     const mode = modes.find((item) => item.id === optionType);
+
+    if (phase !== 'intro' || coachingSessionId || scriptTurns.length) {
+      setErrorMessage('이미 코칭 옵션이 선택되었어요. 현재 코칭을 먼저 진행해주세요.');
+      return;
+    }
 
     if (!learningSessionId) {
       setErrorMessage('학습 세션 정보를 아직 찾지 못했어요. 지도 학습 완료 후 다시 시도해주세요.');
@@ -450,20 +471,23 @@ You: ${turn.expectedText}`)
                 <span>{message.speaker}</span>
                 <p>{message.text}</p>
 
-                {message.quickReplies && (
+                {getActiveQuickReplies(message.quickReplies, phase).length ? (
                   <CoachingModeSelector
-                    modes={message.quickReplies.map((reply) => ({
+                    modes={getActiveQuickReplies(message.quickReplies, phase).map((reply) => ({
                       id: reply.id,
                       label: reply.label,
                       modeId: reply.modeId,
                     }))}
                     selectedModeId=""
+                    disabled={isBusy}
                     onSelect={(replyId) => {
+                      if (isBusy) return;
+
                       const reply = message.quickReplies.find((item) => item.id === replyId);
                       handleQuickReply(reply);
                     }}
                   />
-                )}
+                ) : null}
               </div>
             </article>
           ),

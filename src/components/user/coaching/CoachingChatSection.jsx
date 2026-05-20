@@ -348,7 +348,14 @@ You: ${turn.expectedText}`)
     }
   };
 
-  const { isRecording, toggleRecording } = useVoiceRecorder({
+  const {
+    isRecording,
+    audioInputDevices,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    isVirtualMicrophoneSelected,
+    toggleRecording,
+  } = useVoiceRecorder({
     onRecorded: handleRecordedAudio,
     onError: setErrorMessage,
   });
@@ -480,6 +487,32 @@ You: ${turn.expectedText}`)
           handleSendMessage();
         }}
       >
+        <div className="coaching-mic-device-row">
+          <label htmlFor="coaching-mic-device">마이크</label>
+          <select
+            id="coaching-mic-device"
+            value={selectedDeviceId}
+            onChange={(event) => setSelectedDeviceId(event.target.value)}
+            disabled={isRecording || isBusy || !audioInputDevices.length}
+          >
+            {audioInputDevices.length ? (
+              audioInputDevices.map((device, index) => (
+                <option key={device.deviceId || index} value={device.deviceId}>
+                  {device.label || `마이크 ${index + 1}`}
+                </option>
+              ))
+            ) : (
+              <option value="">마이크 권한 확인 필요</option>
+            )}
+          </select>
+        </div>
+
+        {isVirtualMicrophoneSelected ? (
+          <p className="coaching-mic-device-warning">
+            현재 가상 마이크가 선택되어 있어 음성이 인식되지 않을 수 있습니다. MacBook 마이크를 선택해주세요.
+          </p>
+        ) : null}
+
         <input
           value={input}
           onChange={(event) => setInput(event.target.value)}

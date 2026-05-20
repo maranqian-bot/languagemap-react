@@ -6,13 +6,28 @@ const MIN_AUDIO_RMS_LEVEL = 0.015;
 const MIN_AUDIO_PEAK_LEVEL = 0.08;
 const AUDIO_BITS_PER_SECOND = 128000;
 const RECORDING_TIMESLICE_MS = 250;
+const VIRTUAL_MIC_KEYWORDS = ['filmage', 'virtual', 'blackhole', 'obs', 'aggregate'];
+
+function isVirtualAudioInputLabel(label = '') {
+    const normalizedLabel = label.toLowerCase();
+
+    return VIRTUAL_MIC_KEYWORDS.some((keyword) => normalizedLabel.includes(keyword));
+}
+
+function findPreferredAudioInput(devices = []) {
+    return devices.find((device) => !isVirtualAudioInputLabel(device.label)) ?? devices[0] ?? null;
+}
 
 // 브라우저 마이크 녹음 상태와 동작을 관리하는 Hook
 export function useVoiceRecorder({ onRecorded, onError } = {}) {
     const [isRecording, setIsRecording] = useState(false);
+    const [audioInputDevices, setAudioInputDevices] = useState([]);
+    const [selectedDeviceId, setSelectedDeviceId] = useState('');
+    const [activeTrackLabel, setActiveTrackLabel] = useState('');
 
     const mediaRecorderRef = useRef(null);
     const mediaStreamRef = useRef(null);
+    const userSelectedDeviceRef = useRef(false);
     const audioChunksRef = useRef([]);
     const chunkSizesRef = useRef([]);
     const recordingStartedAtRef = useRef(0);
@@ -100,9 +115,40 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
         stats.sampleCount > 0 &&
         (stats.maxRms >= MIN_AUDIO_RMS_LEVEL || stats.maxPeak >= MIN_AUDIO_PEAK_LEVEL);
 
+    const refreshAudioInputDevices = async () => {
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter((device) => device.kind === 'audioinput');
+
+            setAudioInputDevices(audioInputs);
+            setSelectedDeviceId((currentDeviceId) => {
+                const currentDevice = audioInputs.find((device) => device.deviceId === currentDeviceId);
+
+                if (
+                    currentDevice &&
+                    (userSelectedDeviceRef.current || !isVirtualAudioInputLabel(currentDevice.label))
+                ) {
+                    return currentDeviceId;
+                }
+
+                return findPreferredAudioInput(audioInputs)?.deviceId ?? '';
+            });
+        } catch (error) {
+            console.warn('Audio input device enumeration failed:', error);
+        }
+    };
+
     useEffect(() => {
+        refreshAudioInputDevices();
+
+        navigator.mediaDevices?.addEventListener?.('devicechange', refreshAudioInputDevices);
+
         // 컴포넌트 종료 시 사용 중인 마이크 stream 정리
         return () => {
+            navigator.mediaDevices?.removeEventListener?.('devicechange', refreshAudioInputDevices);
+
             if (stopTimerRef.current) {
                 clearTimeout(stopTimerRef.current);
             }
@@ -137,15 +183,23 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
             chunkSizesRef.current = [];
             resetAudioLevelStats();
 
+            const audioConstraints = {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            };
+
+            if (selectedDeviceId) {
+                audioConstraints.deviceId = { exact: selectedDeviceId };
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                },
+                audio: audioConstraints,
             });
 
             mediaStreamRef.current = stream;
+            refreshAudioInputDevices();
+
             startAudioLevelMonitoring(stream);
 
             const mimeType = getSupportedMimeType();
@@ -169,14 +223,21 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
             }
 
             mediaRecorderRef.current = recorder;
-            console.log('media recorder mimeType:', recorder.mimeType);
-            console.log('media stream audio tracks:', stream.getAudioTracks().map((track) => ({
+            const trackDetails = stream.getAudioTracks().map((track) => ({
                 label: track.label,
                 enabled: track.enabled,
                 muted: track.muted,
                 readyState: track.readyState,
                 settings: track.getSettings?.(),
-            })));
+            }));
+            const trackLabel = trackDetails.map((track) => track.label).filter(Boolean).join(', ');
+
+            setActiveTrackLabel(trackLabel);
+            console.log('media recorder mimeType:', recorder.mimeType);
+            console.log('media stream audio tracks:', {
+                selectedDeviceId,
+                tracks: trackDetails,
+            });
 
             // 녹음 중 생성되는 음성 데이터를 임시 저장
             recorder.ondataavailable = (event) => {
@@ -206,6 +267,7 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                         .join(', ') || 'unknown';
 
                     console.log('recorded audio summary:', {
+                        selectedDeviceId,
                         durationMs: recordingDurationMs,
                         blobSize: audioBlob.size,
                         blobType: audioBlob.type,
@@ -350,8 +412,21 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
         await startRecording();
     };
 
+    const selectAudioInputDevice = (deviceId) => {
+        userSelectedDeviceRef.current = true;
+        setSelectedDeviceId(deviceId);
+        setActiveTrackLabel('');
+    };
+
     return {
         isRecording,
+        audioInputDevices,
+        selectedDeviceId,
+        setSelectedDeviceId: selectAudioInputDevice,
+        activeTrackLabel,
+        isVirtualMicrophoneSelected:
+            isVirtualAudioInputLabel(activeTrackLabel) ||
+            isVirtualAudioInputLabel(audioInputDevices.find((device) => device.deviceId === selectedDeviceId)?.label),
         startRecording,
         stopRecording,
         toggleRecording,

@@ -3,11 +3,80 @@ import axiosInstance from '../axiosInstance';
 const COACHING_REQUEST_TIMEOUT_MS = 60000;
 const COACHING_REQUEST_CONFIG = {
   timeout: COACHING_REQUEST_TIMEOUT_MS,
+  rawResponse: true,
 };
+
+function resolveRequestUrl(config = {}) {
+  const url = config.url ?? '';
+  const baseURL = config.baseURL ?? '';
+
+  if (!url) return baseURL || 'unknown-url';
+  if (/^https?:\/\//i.test(url)) return url;
+  if (!baseURL) return url;
+
+  return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+}
+
+function getResponseHeader(response, name) {
+  const normalizedName = name.toLowerCase();
+  const headers = response?.headers ?? {};
+
+  return headers[name] ?? headers[normalizedName] ?? '';
+}
+
+function getResponseBody(response) {
+  if (response && typeof response === 'object' && 'status' in response && 'data' in response) {
+    return response.data;
+  }
+
+  return response;
+}
+
+function getResponseSummary(label, response) {
+  return {
+    label,
+    method: response?.config?.method?.toUpperCase?.() ?? 'UNKNOWN',
+    url: response?.config?.url ?? 'unknown-url',
+    finalUrl: resolveRequestUrl(response?.config),
+    status: response?.status,
+    contentType: getResponseHeader(response, 'content-type') || 'unknown',
+  };
+}
+
+function isHtmlResponse(response) {
+  const contentType = getResponseHeader(response, 'content-type').toLowerCase();
+  const body = getResponseBody(response);
+
+  return contentType.includes('text/html') ||
+    (typeof body === 'string' && /<!doctype html|<html[\s>]/i.test(body.slice(0, 200)));
+}
+
+function assertJsonApiResponse(response, label) {
+  const summary = getResponseSummary(label, response);
+
+  console.error('[COACHING_HTTP]', summary);
+
+  if (!isHtmlResponse(response)) {
+    return;
+  }
+
+  const body = getResponseBody(response);
+
+  console.error('[COACHING_API_ROUTING_ERROR]', {
+    ...summary,
+    bodyPreview: typeof body === 'string' ? body.slice(0, 160) : '',
+  });
+
+  throw new Error(
+    `코칭 API 요청이 JSON이 아닌 HTML을 반환했습니다. API 경로를 확인해주세요. (${summary.finalUrl})`
+  );
+}
 
 async function withCoachingRequest(label, requestFactory) {
   try {
-    return await requestFactory();
+    const response = await requestFactory();
+
+    return response;
   } catch (error) {
     const method = error.config?.method?.toUpperCase?.() ?? 'UNKNOWN';
     const url = error.config?.url ?? 'unknown-url';
@@ -16,6 +85,9 @@ async function withCoachingRequest(label, requestFactory) {
       label,
       method,
       url,
+      finalUrl: resolveRequestUrl(error.config),
+      status: error.response?.status,
+      contentType: getResponseHeader(error.response, 'content-type') || 'unknown',
       timeout: error.config?.timeout,
       code: error.code,
       message: error.message,
@@ -27,16 +99,16 @@ async function withCoachingRequest(label, requestFactory) {
 
 function unwrapCoachingResponse(response, label) {
   console.error('[COACHING_DEBUG]', `${label} raw response`, response);
+  assertJsonApiResponse(response, label);
 
-  const envelope = response?.data && typeof response.data === 'object'
-    ? response.data
-    : response;
+  const body = getResponseBody(response);
+  const envelope = body && typeof body === 'object' ? body : null;
 
   if (envelope?.success === false) {
     throw new Error(envelope.message || '코칭 요청 처리 중 오류가 발생했습니다.');
   }
 
-  const unwrapped = envelope?.data ?? response?.data?.data ?? response?.data ?? response;
+  const unwrapped = envelope?.data ?? body;
 
   console.error('[COACHING_DEBUG]', `${label} unwrapped data`, unwrapped);
 
@@ -47,7 +119,7 @@ export async function getCoachingEntry(sessionId) {
   const response = await withCoachingRequest('get coaching entry', () =>
     axiosInstance.get(`/api/coaching/entry/${sessionId}`, COACHING_REQUEST_CONFIG)
   );
-  return response.data;
+  return unwrapCoachingResponse(response, 'get coaching entry');
 }
 
 export async function startCoachingFlow({ sessionId, optionType }) {
@@ -109,6 +181,7 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
       formData,
       {
         timeout: COACHING_REQUEST_TIMEOUT_MS,
+        rawResponse: true,
         headers: {
           'Content-Type': 'multipart/form-data',
         },

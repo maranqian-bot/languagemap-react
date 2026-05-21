@@ -31,7 +31,13 @@ let waitingQueue = [];
 
 // 응답 인터셉터 - 401 시 자동 재발급
 axiosInstance.interceptors.response.use(
-    (response) => response.data,
+    (response) => {
+        if (response.config?.rawResponse) {
+            return response;
+        }
+
+        return response.data;
+    },
     async (error) => {
         const originalRequest = error.config;
 

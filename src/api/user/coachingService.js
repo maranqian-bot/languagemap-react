@@ -174,17 +174,29 @@ export async function startConversation(coachingSessionId) {
 export async function processUserSpeech(coachingSessionId, audioFile) {
   const formData = new FormData();
   formData.append('audioFile', audioFile, audioFile.name ?? 'speech.webm');
+  const speechUrl = `/api/coaching/conversation/${coachingSessionId}/speech`;
+
+  console.error('[COACHING_HTTP_REQUEST]', {
+    label: 'process user speech',
+    method: 'POST',
+    url: speechUrl,
+    finalUrl: resolveRequestUrl({
+      baseURL: axiosInstance.defaults.baseURL,
+      url: speechUrl,
+    }),
+    fileName: audioFile.name,
+    fileType: audioFile.type,
+    fileSize: audioFile.size,
+    timeout: COACHING_REQUEST_TIMEOUT_MS,
+  });
 
   const response = await withCoachingRequest('process user speech', () =>
     axiosInstance.post(
-      `/api/coaching/conversation/${coachingSessionId}/speech`,
+      speechUrl,
       formData,
       {
         timeout: COACHING_REQUEST_TIMEOUT_MS,
         rawResponse: true,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
       }
     )
   );

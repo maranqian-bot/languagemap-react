@@ -28,7 +28,15 @@ async function withCoachingRequest(label, requestFactory) {
 function unwrapCoachingResponse(response, label) {
   console.error('[COACHING_DEBUG]', `${label} raw response`, response);
 
-  const unwrapped = response?.data?.data ?? response?.data ?? response;
+  const envelope = response?.data && typeof response.data === 'object'
+    ? response.data
+    : response;
+
+  if (envelope?.success === false) {
+    throw new Error(envelope.message || '코칭 요청 처리 중 오류가 발생했습니다.');
+  }
+
+  const unwrapped = envelope?.data ?? response?.data?.data ?? response?.data ?? response;
 
   console.error('[COACHING_DEBUG]', `${label} unwrapped data`, unwrapped);
 
@@ -88,7 +96,7 @@ export async function startConversation(coachingSessionId) {
     )
   );
 
-  return response.data;
+  return unwrapCoachingResponse(response, 'start conversation');
 }
 
 export async function processUserSpeech(coachingSessionId, audioFile) {
@@ -108,7 +116,7 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
     )
   );
 
-  return response.data;
+  return unwrapCoachingResponse(response, 'process user speech') ?? {};
 }
 
 export async function finishConversation(coachingSessionId) {
@@ -120,7 +128,7 @@ export async function finishConversation(coachingSessionId) {
     )
   );
 
-  return response.data;
+  return unwrapCoachingResponse(response, 'finish conversation');
 }
 
 export async function getCoachingMessages(coachingSessionId) {
@@ -131,7 +139,7 @@ export async function getCoachingMessages(coachingSessionId) {
     )
   );
 
-  return response.data;
+  return unwrapCoachingResponse(response, 'get coaching messages');
 }
 
 export const coachingService = {

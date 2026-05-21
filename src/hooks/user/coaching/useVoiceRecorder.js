@@ -6,7 +6,8 @@ const MIN_AUDIO_RMS_LEVEL = 0.015;
 const MIN_AUDIO_PEAK_LEVEL = 0.08;
 const AUDIO_BITS_PER_SECOND = 128000;
 const RECORDING_TIMESLICE_MS = 250;
-const VIRTUAL_MIC_KEYWORDS = ['filmage', 'virtual', 'blackhole', 'obs', 'aggregate'];
+const SELECTED_MIC_STORAGE_KEY = 'coaching:selectedAudioInputDeviceId';
+const VIRTUAL_MIC_KEYWORDS = ['virtual', 'filmage', 'blackhole', 'obs', 'aggregate', 'loopback'];
 
 function isVirtualAudioInputLabel(label = '') {
     const normalizedLabel = label.toLowerCase();
@@ -18,16 +19,38 @@ function findPreferredAudioInput(devices = []) {
     return devices.find((device) => !isVirtualAudioInputLabel(device.label)) ?? devices[0] ?? null;
 }
 
+function getStoredAudioInputDeviceId() {
+    try {
+        return localStorage.getItem(SELECTED_MIC_STORAGE_KEY) || '';
+    } catch {
+        return '';
+    }
+}
+
+function storeAudioInputDeviceId(deviceId) {
+    try {
+        if (deviceId) {
+            localStorage.setItem(SELECTED_MIC_STORAGE_KEY, deviceId);
+        } else {
+            localStorage.removeItem(SELECTED_MIC_STORAGE_KEY);
+        }
+    } catch {
+        // localStorage may be unavailable in private or embedded browsers.
+    }
+}
+
 // 브라우저 마이크 녹음 상태와 동작을 관리하는 Hook
 export function useVoiceRecorder({ onRecorded, onError } = {}) {
     const [isRecording, setIsRecording] = useState(false);
     const [audioInputDevices, setAudioInputDevices] = useState([]);
-    const [selectedDeviceId, setSelectedDeviceId] = useState('');
+    const [selectedDeviceId, setSelectedDeviceId] = useState(getStoredAudioInputDeviceId);
     const [activeTrackLabel, setActiveTrackLabel] = useState('');
+    const [deviceFallbackReason, setDeviceFallbackReason] = useState('');
 
     const mediaRecorderRef = useRef(null);
     const mediaStreamRef = useRef(null);
     const userSelectedDeviceRef = useRef(false);
+    const deviceFallbackReasonRef = useRef('');
     const audioChunksRef = useRef([]);
     const chunkSizesRef = useRef([]);
     const recordingStartedAtRef = useRef(0);
@@ -124,7 +147,13 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
 
             setAudioInputDevices(audioInputs);
             setSelectedDeviceId((currentDeviceId) => {
+                const storedDeviceId = getStoredAudioInputDeviceId();
+                const storedDevice = audioInputs.find((device) => device.deviceId === storedDeviceId);
                 const currentDevice = audioInputs.find((device) => device.deviceId === currentDeviceId);
+
+                if (storedDevice) {
+                    return storedDevice.deviceId;
+                }
 
                 if (
                     currentDevice &&
@@ -134,6 +163,10 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                 }
 
                 return findPreferredAudioInput(audioInputs)?.deviceId ?? '';
+            });
+            console.log('audio input devices refreshed:', {
+                deviceCount: audioInputs.length,
+                selectedDeviceId,
             });
         } catch (error) {
             console.warn('Audio input device enumeration failed:', error);
@@ -182,20 +215,44 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
             audioChunksRef.current = [];
             chunkSizesRef.current = [];
             resetAudioLevelStats();
+            deviceFallbackReasonRef.current = '';
+            setDeviceFallbackReason('');
 
-            const audioConstraints = {
+            const baseAudioConstraints = {
                 echoCancellation: true,
                 noiseSuppression: true,
                 autoGainControl: true,
             };
 
-            if (selectedDeviceId) {
-                audioConstraints.deviceId = { exact: selectedDeviceId };
-            }
+            let stream;
+            const shouldUseExactDevice = Boolean(selectedDeviceId && audioInputDevices.length > 1);
 
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: audioConstraints,
-            });
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: shouldUseExactDevice
+                        ? {
+                            ...baseAudioConstraints,
+                            deviceId: { exact: selectedDeviceId },
+                        }
+                        : baseAudioConstraints,
+                });
+            } catch (error) {
+                if (shouldUseExactDevice) {
+                    const fallbackReason = `${error.name || 'DeviceError'}: ${error.message || 'selected device unavailable'}`;
+                    deviceFallbackReasonRef.current = fallbackReason;
+                    setDeviceFallbackReason(fallbackReason);
+                    console.warn('Selected microphone unavailable. Falling back to default audio input.', {
+                        selectedDeviceId,
+                        fallbackReason,
+                    });
+
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: baseAudioConstraints,
+                    });
+                } else {
+                    throw error;
+                }
+            }
 
             mediaStreamRef.current = stream;
             refreshAudioInputDevices();
@@ -236,6 +293,8 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
             console.log('media recorder mimeType:', recorder.mimeType);
             console.log('media stream audio tracks:', {
                 selectedDeviceId,
+                deviceCount: audioInputDevices.length,
+                fallbackReason: deviceFallbackReasonRef.current,
                 tracks: trackDetails,
             });
 
@@ -268,6 +327,8 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
 
                     console.log('recorded audio summary:', {
                         selectedDeviceId,
+                        deviceCount: audioInputDevices.length,
+                        fallbackReason: deviceFallbackReasonRef.current,
                         durationMs: recordingDurationMs,
                         blobSize: audioBlob.size,
                         blobType: audioBlob.type,
@@ -415,7 +476,10 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
     const selectAudioInputDevice = (deviceId) => {
         userSelectedDeviceRef.current = true;
         setSelectedDeviceId(deviceId);
+        storeAudioInputDeviceId(deviceId);
         setActiveTrackLabel('');
+        deviceFallbackReasonRef.current = '';
+        setDeviceFallbackReason('');
     };
 
     return {
@@ -424,6 +488,7 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
         selectedDeviceId,
         setSelectedDeviceId: selectAudioInputDevice,
         activeTrackLabel,
+        deviceFallbackReason,
         isVirtualMicrophoneSelected:
             isVirtualAudioInputLabel(activeTrackLabel) ||
             isVirtualAudioInputLabel(audioInputDevices.find((device) => device.deviceId === selectedDeviceId)?.label),

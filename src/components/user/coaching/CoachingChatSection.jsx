@@ -85,6 +85,27 @@ function getActiveQuickReplies(quickReplies, phase) {
   });
 }
 
+function normalizeSpeechTurnResponse(response) {
+  const data = response?.data ?? response ?? {};
+
+  return {
+    coachingSessionId: data.coachingSessionId ?? null,
+    userMessageId: data.userMessageId ?? null,
+    recognizedText: data.recognizedText ?? '',
+    userFeedback: data.userFeedback ?? data.feedback ?? '',
+    problemWords: data.problemWords ?? [],
+    accuracyScore: data.accuracyScore ?? 0,
+    fluencyScore: data.fluencyScore ?? 0,
+    completenessScore: data.completenessScore ?? 0,
+    pronunciationScore: data.pronunciationScore ?? 0,
+    conversationEnded: Boolean(data.conversationEnded),
+    nextScriptTurnId: data.nextScriptTurnId ?? data.nextAssistantMessage?.coachingScriptTurnId ?? null,
+    nextTurnOrder: data.nextTurnOrder ?? data.nextAssistantMessage?.turnOrder ?? null,
+    nextAssistantText: data.nextAssistantText ?? data.nextAssistantMessage?.message ?? data.nextAssistantMessage?.text ?? '',
+    nextAssistantAudioUrl: data.nextAssistantAudioUrl ?? data.nextAssistantMessage?.audioUrl ?? '',
+  };
+}
+
 function CoachingChatSection({
   summary,
   modes = [],
@@ -326,7 +347,10 @@ You: ${turn.expectedText}`)
         type: audioBlob.type || 'audio/webm',
       });
 
-      const turnResponse = await coachingService.processUserSpeech(coachingSessionId, audioFile);
+      const rawTurnResponse = await coachingService.processUserSpeech(coachingSessionId, audioFile);
+      console.error('[COACHING_DEBUG]', 'speech process response shape', rawTurnResponse);
+
+      const turnResponse = normalizeSpeechTurnResponse(rawTurnResponse);
       const userAudioUrl = URL.createObjectURL(audioBlob);
 
       const nextMessages = [
@@ -374,12 +398,18 @@ You: ${turn.expectedText}`)
     audioInputDevices,
     selectedDeviceId,
     setSelectedDeviceId,
+    activeTrackLabel,
+    deviceFallbackReason,
     isVirtualMicrophoneSelected,
     toggleRecording,
   } = useVoiceRecorder({
     onRecorded: handleRecordedAudio,
     onError: setErrorMessage,
   });
+  const selectedAudioInputLabel =
+    audioInputDevices.find((device) => device.deviceId === selectedDeviceId)?.label ||
+    activeTrackLabel ||
+    (audioInputDevices.length ? '현재 선택된 마이크' : '마이크 권한 확인 필요');
 
   const handleMicClick = async () => {
     if (isBusy) return;
@@ -511,29 +541,35 @@ You: ${turn.expectedText}`)
           handleSendMessage();
         }}
       >
-        <div className="coaching-mic-device-row">
-          <label htmlFor="coaching-mic-device">마이크</label>
-          <select
-            id="coaching-mic-device"
-            value={selectedDeviceId}
-            onChange={(event) => setSelectedDeviceId(event.target.value)}
-            disabled={isRecording || isBusy || !audioInputDevices.length}
-          >
-            {audioInputDevices.length ? (
-              audioInputDevices.map((device, index) => (
+        {audioInputDevices.length > 1 ? (
+          <div className="coaching-mic-device-row">
+            <label htmlFor="coaching-mic-device">마이크</label>
+            <select
+              id="coaching-mic-device"
+              value={selectedDeviceId}
+              onChange={(event) => setSelectedDeviceId(event.target.value)}
+              disabled={isRecording || isBusy}
+            >
+              {audioInputDevices.map((device, index) => (
                 <option key={device.deviceId || index} value={device.deviceId}>
                   {device.label || `마이크 ${index + 1}`}
                 </option>
-              ))
-            ) : (
-              <option value="">마이크 권한 확인 필요</option>
-            )}
-          </select>
-        </div>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="coaching-mic-device-current">현재 선택된 마이크: {selectedAudioInputLabel}</p>
+        )}
 
         {isVirtualMicrophoneSelected ? (
           <p className="coaching-mic-device-warning">
-            현재 가상 마이크가 선택되어 있어 음성이 인식되지 않을 수 있습니다. MacBook 마이크를 선택해주세요.
+            현재 가상 마이크가 선택되어 있어 음성이 인식되지 않을 수 있습니다. 사용할 마이크를 선택해주세요.
+          </p>
+        ) : null}
+
+        {deviceFallbackReason ? (
+          <p className="coaching-mic-device-warning">
+            선택한 마이크를 사용할 수 없어 기본 마이크로 녹음합니다.
           </p>
         ) : null}
 

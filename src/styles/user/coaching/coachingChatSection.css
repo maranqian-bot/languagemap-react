@@ -480,6 +480,14 @@
   background: #f4f6f8;
 }
 
+.coaching-mic-device-current {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #526173;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
 .coaching-mic-device-warning {
   grid-column: 1 / -1;
   margin: -2px 0 2px;

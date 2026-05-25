@@ -175,6 +175,15 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
   const formData = new FormData();
   formData.append('audioFile', audioFile, audioFile.name ?? 'speech.webm');
   const speechUrl = `/api/coaching/conversation/${coachingSessionId}/speech`;
+  const accessToken = localStorage.getItem('accessToken');
+  const headers = new Headers();
+
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`);
+  }
+
+  const isFile = typeof File !== 'undefined' && audioFile instanceof File;
+  const isBlob = typeof Blob !== 'undefined' && audioFile instanceof Blob;
 
   console.error('[COACHING_HTTP_REQUEST]', {
     label: 'process user speech',
@@ -188,20 +197,96 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
     fileType: audioFile.type,
     fileSize: audioFile.size,
     timeout: COACHING_REQUEST_TIMEOUT_MS,
+    isFile,
+    isBlob,
+    formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({
+      key,
+      valueType: value?.constructor?.name ?? typeof value,
+      valueName: typeof value?.name === 'string' ? value.name : undefined,
+      valueSize: typeof value?.size === 'number' ? value.size : undefined,
+      valueMimeType: typeof value?.type === 'string' ? value.type : undefined,
+    })),
   });
 
-  const response = await withCoachingRequest('process user speech', () =>
-    axiosInstance.post(
-      speechUrl,
-      formData,
-      {
-        timeout: COACHING_REQUEST_TIMEOUT_MS,
-        rawResponse: true,
-      }
-    )
-  );
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), COACHING_REQUEST_TIMEOUT_MS);
+  let response;
+  let responseText;
 
-  return unwrapCoachingResponse(response, 'process user speech') ?? {};
+  try {
+    response = await fetch(resolveRequestUrl({
+      baseURL: axiosInstance.defaults.baseURL,
+      url: speechUrl,
+    }), {
+      method: 'POST',
+      body: formData,
+      headers,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+
+    responseText = await response.text();
+  } catch (error) {
+    console.error('[COACHING_API_ERROR]', {
+      label: 'process user speech',
+      method: 'POST',
+      url: speechUrl,
+      finalUrl: resolveRequestUrl({
+        baseURL: axiosInstance.defaults.baseURL,
+        url: speechUrl,
+      }),
+      timeout: COACHING_REQUEST_TIMEOUT_MS,
+      message: error.message,
+      name: error.name,
+    });
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+
+  console.error('[COACHING_HTTP_RESPONSE]', {
+    label: 'process user speech',
+    method: 'POST',
+    url: speechUrl,
+    responseUrl: response.url,
+    status: response.status,
+    contentType,
+    bodyPreview: responseText.slice(0, 200),
+  });
+
+  if (contentType.toLowerCase().includes('text/html') || /<!doctype html|<html[\s>]/i.test(responseText.slice(0, 200))) {
+    throw new Error(`코칭 API 요청이 JSON이 아닌 HTML을 반환했습니다. API 경로를 확인해주세요. (${response.url})`);
+  }
+
+  let parsedBody;
+
+  try {
+    parsedBody = responseText ? JSON.parse(responseText) : {};
+  } catch (error) {
+    console.error('[COACHING_API_PARSE_ERROR]', {
+      label: 'process user speech',
+      responseUrl: response.url,
+      status: response.status,
+      contentType,
+      bodyPreview: responseText.slice(0, 200),
+      message: error.message,
+    });
+    throw new Error('코칭 API 응답을 해석하지 못했습니다.');
+  }
+
+  if (!response.ok) {
+    throw new Error(parsedBody?.message || '코칭 요청 처리 중 오류가 발생했습니다.');
+  }
+
+  if (parsedBody?.success === false) {
+    throw new Error(parsedBody.message || '코칭 요청 처리 중 오류가 발생했습니다.');
+  }
+
+  console.error('[COACHING_DEBUG]', 'process user speech raw response', parsedBody);
+
+  return parsedBody?.data ?? parsedBody ?? {};
 }
 
 export async function finishConversation(coachingSessionId) {

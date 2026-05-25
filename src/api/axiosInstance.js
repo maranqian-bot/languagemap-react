@@ -5,15 +5,28 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const axiosInstance = axios.create({
     baseURL: API_BASE_URL,
     timeout: 10000,
-    headers: {
-        'Content-Type': 'application/json',
-    },
     withCredentials: true,
 });
+
+function isFormDataPayload(data) {
+    return typeof FormData !== 'undefined' && data instanceof FormData;
+}
 
 // 요청 인터셉터 - 모든 요청에 accessToken 자동 첨부
 axiosInstance.interceptors.request.use(
     (config) => {
+        const formDataRequest = isFormDataPayload(config.data);
+
+        if (formDataRequest) {
+            if (typeof config.headers?.delete === 'function') {
+                config.headers.delete('Content-Type');
+            } else if (config.headers) {
+                delete config.headers['Content-Type'];
+            }
+        } else if (config.data !== undefined && config.headers && !config.headers['Content-Type']) {
+            config.headers['Content-Type'] = 'application/json';
+        }
+
         const token = localStorage.getItem('accessToken');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;

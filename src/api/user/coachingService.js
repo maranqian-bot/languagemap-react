@@ -175,6 +175,7 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
   const formData = new FormData();
   formData.append('audioFile', audioFile, audioFile.name ?? 'speech.webm');
   const speechUrl = `/api/coaching/conversation/${coachingSessionId}/speech`;
+  const directSpeechUrl = `http://ec2-16-176-9-80.ap-southeast-2.compute.amazonaws.com:8080${speechUrl}`;
   const isFile = typeof File !== 'undefined' && audioFile instanceof File;
   const isBlob = typeof Blob !== 'undefined' && audioFile instanceof Blob;
 
@@ -182,10 +183,7 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
     label: 'process user speech',
     method: 'POST',
     url: speechUrl,
-    finalUrl: resolveRequestUrl({
-      baseURL: axiosInstance.defaults.baseURL,
-      url: speechUrl,
-    }),
+    finalUrl: directSpeechUrl,
     fileName: audioFile.name,
     fileType: audioFile.type,
     fileSize: audioFile.size,
@@ -209,10 +207,7 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
   let responseText;
 
   try {
-    response = await fetch(resolveRequestUrl({
-      baseURL: axiosInstance.defaults.baseURL,
-      url: speechUrl,
-    }), {
+    response = await fetch(directSpeechUrl, {
       method: 'POST',
       body: formData,
       signal: controller.signal,
@@ -224,10 +219,7 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
       label: 'process user speech',
       method: 'POST',
       url: speechUrl,
-      finalUrl: resolveRequestUrl({
-        baseURL: axiosInstance.defaults.baseURL,
-        url: speechUrl,
-      }),
+      finalUrl: directSpeechUrl,
       timeout: COACHING_REQUEST_TIMEOUT_MS,
       message: error.message,
       name: error.name,

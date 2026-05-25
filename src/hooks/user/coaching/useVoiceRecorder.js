@@ -306,7 +306,7 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                 }
             };
 
-            // 녹음 종료 후 음성 파일 생성 및 외부 콜백 전달
+            // 녹음 종료 후 최종 chunk 수집이 끝난 파일만 생성 및 전달
             recorder.onstop = async () => {
                 try {
                     setIsRecording(false);
@@ -316,8 +316,11 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                     const averageRms = audioLevelStats.sampleCount
                         ? audioLevelStats.rmsTotal / audioLevelStats.sampleCount
                         : 0;
-                    const audioBlob = new Blob(audioChunksRef.current, {
-                        type: recorder.mimeType || 'audio/webm',
+                    const recordedChunks = [...audioChunksRef.current];
+                    const mimeType = recorder.mimeType || 'audio/webm;codecs=opus';
+                    const audioBlob = new Blob(recordedChunks, { type: mimeType });
+                    const audioFile = new File([audioBlob], `coaching-${Date.now()}.webm`, {
+                        type: audioBlob.type || mimeType,
                     });
                     const trackLabel = mediaStreamRef.current
                         ?.getAudioTracks()
@@ -332,7 +335,10 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                         durationMs: recordingDurationMs,
                         blobSize: audioBlob.size,
                         blobType: audioBlob.type,
-                        chunkCount: chunkSizesRef.current.length,
+                        chunkCount: recordedChunks.length,
+                        fileName: audioFile.name,
+                        fileSize: audioFile.size,
+                        fileType: audioFile.type,
                         trackLabel,
                         audioLevel: {
                             sampleCount: audioLevelStats.sampleCount,
@@ -357,6 +363,11 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                         return;
                     }
 
+                    if (recordedChunks.length === 0) {
+                        onError?.('녹음 데이터가 수집되지 않았습니다. 다시 녹음해주세요.');
+                        return;
+                    }
+
                     if (audioBlob.size < MIN_AUDIO_BLOB_SIZE_BYTES) {
                         console.warn('Audio blob is small. Uploading for server-side recognition anyway.', {
                             blobSize: audioBlob.size,
@@ -372,7 +383,7 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
                         });
                     }
 
-                    await onRecorded?.(audioBlob);
+                    await onRecorded?.(audioFile);
                 } catch (error) {
                     console.error(error);
                     onError?.('녹음 파일 처리 중 오류가 발생했습니다.');
@@ -459,7 +470,6 @@ export function useVoiceRecorder({ onRecorded, onError } = {}) {
             return;
         }
 
-        recorder.requestData();
         recorder.stop();
     };
 

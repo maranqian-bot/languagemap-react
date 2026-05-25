@@ -175,13 +175,6 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
   const formData = new FormData();
   formData.append('audioFile', audioFile, audioFile.name ?? 'speech.webm');
   const speechUrl = `/api/coaching/conversation/${coachingSessionId}/speech`;
-  const accessToken = localStorage.getItem('accessToken');
-  const headers = new Headers();
-
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
-  }
-
   const isFile = typeof File !== 'undefined' && audioFile instanceof File;
   const isBlob = typeof Blob !== 'undefined' && audioFile instanceof Blob;
 
@@ -199,6 +192,8 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
     timeout: COACHING_REQUEST_TIMEOUT_MS,
     isFile,
     isBlob,
+    credentialsIncluded: false,
+    authorizationIncluded: false,
     formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({
       key,
       valueType: value?.constructor?.name ?? typeof value,
@@ -220,8 +215,6 @@ export async function processUserSpeech(coachingSessionId, audioFile) {
     }), {
       method: 'POST',
       body: formData,
-      headers,
-      credentials: 'include',
       signal: controller.signal,
     });
 

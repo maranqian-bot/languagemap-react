@@ -333,7 +333,7 @@ You: ${turn.expectedText}`)
     onEvaluationReady(finalResult);
   };
 
-  const handleRecordedAudio = async (audioBlob) => {
+  const handleRecordedAudio = async (recordedAudio) => {
     if (!coachingSessionId) {
       setErrorMessage('코칭 세션이 준비되지 않았어요.');
       return;
@@ -343,15 +343,17 @@ You: ${turn.expectedText}`)
       setIsBusy(true);
       setErrorMessage('');
 
-      const audioFile = new File([audioBlob], `coaching-${Date.now()}.webm`, {
-        type: audioBlob.type || 'audio/webm',
-      });
+      const audioFile = recordedAudio instanceof File
+        ? recordedAudio
+        : new File([recordedAudio], `coaching-${Date.now()}.webm`, {
+          type: recordedAudio?.type || 'audio/webm;codecs=opus',
+        });
 
       const rawTurnResponse = await coachingService.processUserSpeech(coachingSessionId, audioFile);
       console.error('[COACHING_DEBUG]', 'speech process response shape', rawTurnResponse);
 
       const turnResponse = normalizeSpeechTurnResponse(rawTurnResponse);
-      const userAudioUrl = URL.createObjectURL(audioBlob);
+      const userAudioUrl = URL.createObjectURL(audioFile);
 
       const nextMessages = [
         createVoiceMessage({

@@ -140,6 +140,13 @@ let state = { optionType: 'DIALOGUE', turnIndex: 0 };
 
 const scriptFor = (optionType) => SCRIPTS[optionType] ?? SCRIPTS.DIALOGUE;
 
+// 실제 서비스에서는 FastAPI 가 Azure Speech(en-US-JennyNeural)로 TTS 를 만들어
+// /static/audio/*.wav 를 돌려준다. 데모에는 Azure 키가 없으므로 같은 문장을
+// 미리 합성해 둔 public/demo-audio/*.mp3 를 대신 내려준다.
+// (audioUrl 이 비면 재생 버튼이 눌러도 아무 반응이 없어 고장난 것처럼 보인다)
+const audioUrlFor = (optionType, turnOrder) =>
+  `/demo-audio/${(SCRIPTS[optionType] ? optionType : 'DIALOGUE').toLowerCase()}-${turnOrder}.mp3`;
+
 // ------------------------------------------------------------------ 핸들러
 export const demoHandlers = [
   // ---- 인증 / 구독 : restoreSession 이 이 둘을 호출해 Premium 세션을 만든다 ----
@@ -207,8 +214,7 @@ export const demoHandlers = [
       turnOrder: 1,
       assistantText: turns[0].assistantText,
       expectedText: turns[0].expectedText,
-      // 실제 서비스에서는 Azure TTS 결과 URL 이 온다. 데모에서는 음성 없이 텍스트만.
-      assistantAudioUrl: null,
+      assistantAudioUrl: audioUrlFor(state.optionType, 1),
     });
   }),
 
@@ -239,7 +245,7 @@ export const demoHandlers = [
       nextScriptTurnId: conversationEnded ? null : nextIndex + 1,
       nextTurnOrder: conversationEnded ? null : nextIndex + 1,
       nextAssistantText: conversationEnded ? null : turns[nextIndex].assistantText,
-      nextAssistantAudioUrl: null,
+      nextAssistantAudioUrl: conversationEnded ? null : audioUrlFor(state.optionType, nextIndex + 1),
     });
   }),
 
@@ -282,7 +288,7 @@ export const demoHandlers = [
     turns.forEach((turn, i) => {
       messages.push({
         coachingMessageId: i * 2 + 1, coachingSessionId: 1, coachingScriptTurnId: i + 1,
-        role: 'ASSISTANT', message: turn.assistantText, audioUrl: null,
+        role: 'ASSISTANT', message: turn.assistantText, audioUrl: audioUrlFor(state.optionType, i + 1),
       });
       messages.push({
         coachingMessageId: i * 2 + 2, coachingSessionId: 1, coachingScriptTurnId: i + 1,

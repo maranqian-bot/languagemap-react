@@ -1,5 +1,37 @@
 # Mapingo React Frontend
 
+> **[▶︎ 라이브 데모 — AI 회화 코칭](https://languagemap-drab.vercel.app/coaching)**
+> 로그인 없이 바로 열립니다. 백엔드 없이 프론트엔드만으로 동작하는 데모 빌드입니다.
+
+지도 학습을 마친 뒤 AI 코칭에 진입해, 코칭 옵션을 고르고 음성으로 대화하면
+턴마다 발음 평가를 받고 마지막에 종합 피드백까지 확인하는 전체 흐름을 볼 수 있습니다.
+(마이크 권한을 허용하면 실제 녹음 흐름까지 그대로 동작합니다)
+
+**이 저장소에서 제가(마은재) 맡은 부분은 AI 회화 코칭입니다.** 프론트엔드부터
+Spring API, FastAPI(OpenAI · Azure Speech · YouTube Data API)까지 한 기능을
+세로로 전부 구현했습니다.
+
+| 레이어 | 담당 파일 |
+|---|---|
+| React | `src/pages/coaching`, `src/components/user/coaching`, `src/domains/coaching`, `src/hooks/user/coaching`, `src/api/user/coachingService.js` |
+| Spring | [`ai/service/impl`, `ai/repository`, `ai/client`](https://github.com/soo97/languagemap-spring/tree/main/src/main/java/kr/co/mapspring/ai) |
+| FastAPI | [`app/ai_coaching/services`, `api`, `schemas`](https://github.com/soo97/languagemap-FastAPI/tree/main/app/ai_coaching) |
+
+<details>
+<summary>데모 빌드에 대해</summary>
+
+`VITE_DEMO_STANDALONE=true` 로 빌드하면 MSW(Mock Service Worker)가 기동해
+코칭 API 7종을 가로챕니다. 응답 형태는 `languagemap-spring` 의 실제 DTO
+(`CoachingEntryDto`, `CoachingFeedbackDto`, `CoachingPronunciationResultDto` 등)를
+그대로 따르므로, 백엔드를 붙일 때 프론트엔드 코드는 수정할 필요가 없습니다.
+핸들러는 `src/mocks/demo/` 에 있습니다.
+
+데모에서 동작하지 않는 것: 실제 로그인/회원가입, 결제, 커뮤니티 등
+AI 코칭 외 기능은 백엔드가 필요합니다.
+</details>
+
+---
+
 지도 기반 AI 영어 학습 서비스 Mapingo의 React 기반 프론트엔드 서버입니다.
 
 사용자 UI 및 관리자 화면, 지도 기반 학습 인터페이스를 담당합니다.
@@ -205,7 +237,7 @@ git clone https://github.com/soo97/languagemap-react.git
 |---|---|---|
 | 임수현 | 팀장 | (추가 예정) |
 | 고은별 | 팀원 | // |
-| 마은재 | 팀원 | // |
+| 마은재 | 팀원 | AI 회화 코칭 (React · Spring · FastAPI 전 구간) |
 | 이가연 | 팀원 | // |
 | 이현재 | 팀원 | // |
 | 홍순찬 | 팀원 | (사용자)/(관리자) 지도 기반 영어 학습 기능 구현 |
